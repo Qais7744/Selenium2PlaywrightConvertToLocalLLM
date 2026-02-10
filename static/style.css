@@ -1,0 +1,242 @@
+:root {
+    --bg-color: #0d1117;
+    --panel-bg: #161b22;
+    --text-primary: #c9d1d9;
+    --accent-color: #238636;
+    --accent-hover: #2ea043;
+    --border-color: #30363d;
+    --code-font: 'JetBrains Mono', monospace;
+    --ui-font: 'Inter', sans-serif;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: var(--ui-font);
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    width: 95%;
+    max-width: 1600px;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+h1 {
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+}
+
+.subtitle {
+    color: #8b949e;
+    margin-top: 5px;
+    font-size: 0.9em;
+}
+
+.arrow {
+    color: var(--accent-color);
+}
+
+.converter-box {
+    display: flex;
+    gap: 20px;
+    flex: 1;
+    min-height: 0;
+    /* Fix flex overflow */
+}
+
+.panel {
+    flex: 1;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.panel-header {
+    padding: 10px 15px;
+    background: #21262d;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.panel-header h2 {
+    margin: 0;
+    font-size: 1em;
+    font-weight: 600;
+}
+
+.badge {
+    background: #30363d;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    color: #8b949e;
+}
+
+textarea {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-family: var(--code-font);
+    font-size: 14px;
+    padding: 15px;
+    resize: none;
+    outline: none;
+    line-height: 1.5;
+}
+
+.action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+}
+
+button#convertBtn {
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 15px;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    cursor: pointer;
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+button#convertBtn:hover {
+    background: var(--accent-hover);
+    transform: scale(1.05);
+}
+
+button#convertBtn:disabled {
+    background: #30363d;
+    cursor: not-allowed;
+    transform: none;
+}
+
+#btnText {
+    display: none;
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background: var(--panel-bg);
+    padding: 10px 20px;
+    border-radius: 50px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.lang-select {
+    background: transparent;
+    color: var(--text-primary);
+    border: none;
+    font-family: var(--ui-font);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    outline: none;
+    padding-right: 5px;
+}
+
+.lang-select option {
+    background: var(--panel-bg);
+    color: var(--text-primary);
+}
+
+.action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    /* Allow width to grow */
+    margin: 0 20px;
+}
+
+#convertBtn::before {
+    content: "⚡";
+    font-size: 24px;
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+    position: absolute;
+}
+
+.hidden {
+    display: none;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+footer {
+    padding-top: 10px;
+}
+
+.status-bar {
+    font-size: 0.85em;
+    color: #8b949e;
+    text-align: right;
+}
+
+.status-bar.processing {
+    color: #e3b341;
+}
+
+.status-bar.success {
+    color: var(--accent-color);
+}
+
+.status-bar.error {
+    color: #f85149;
+}
+
+.icon-btn {
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.icon-btn:hover {
+    opacity: 1;
+}

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400">
+  <!-- Background -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="arrowGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#43B02A"/>
+      <stop offset="50%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#D63384"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Main Background -->
+  <rect width="1200" height="400" fill="url(#bgGradient)"/>
+  
+  <!-- Grid Pattern -->
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#2d3748" stroke-width="0.5" opacity="0.3"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="400" fill="url(#grid)"/>
+  
+  <!-- Decorative Circles -->
+  <circle cx="100" cy="100" r="150" fill="#43B02A" opacity="0.05"/>
+  <circle cx="1100" cy="300" r="200" fill="#D63384" opacity="0.05"/>
+  
+  <!-- Selenium Logo (Left) -->
+  <g transform="translate(150, 200)">
+    <!-- Hexagon -->
+    <polygon points="0,-60 52,-30 52,30 0,60 -52,30 -52,-30" 
+             fill="none" stroke="#43B02A" stroke-width="3"/>
+    <polygon points="0,-45 39,-22 39,22 0,45 -39,22 -39,-22" 
+             fill="#43B02A" opacity="0.2"/>
+    <text x="0" y="8" text-anchor="middle" fill="#43B02A" font-family="Arial" font-size="28" font-weight="bold">Se</text>
+  </g>
+  
+  <!-- Arrow -->
+  <g transform="translate(600, 200)">
+    <!-- Arrow shaft -->
+    <rect x="-120" y="-8" width="200" height="16" rx="8" fill="url(#arrowGradient)"/>
+    <!-- Arrow head -->
+    <polygon points="100,0 60,-35 60,35" fill="url(#arrowGradient)"/>
+    <!-- Sparkles -->
+    <text x="0" y="-40" text-anchor="middle" fill="#6366f1" font-family="Arial" font-size="20">⚡ LLM</text>
+  </g>
+  
+  <!-- Playwright Logo (Right) -->
+  <g transform="translate(1050, 200)">
+    <!-- Triangle shape -->
+    <polygon points="0,-60 52,40 -52,40" 
+             fill="none" stroke="#D63384" stroke-width="3"/>
+    <polygon points="0,-45 39,30 -39,30" 
+             fill="#D63384" opacity="0.2"/>
+    <text x="0" y="15" text-anchor="middle" fill="#D63384" font-family="Arial" font-size="24" font-weight="bold">▶</text>
+  </g>
+  
+  <!-- Title -->
+  <text x="600" y="80" text-anchor="middle" fill="#ffffff" font-family="Arial" font-size="48" font-weight="bold">
+    Selenium2Playwright
+  </text>
+  
+  <!-- Subtitle -->
+  <text x="600" y="330" text-anchor="middle" fill="#94a3b8" font-family="Arial" font-size="24">
+    Convert Selenium Tests to Playwright using Local LLM
+  </text>
+  
+  <!-- Tech badges -->
+  <g transform="translate(600, 370)">
+    <rect x="-180" y="-12" width="80" height="24" rx="12" fill="#43B02A" opacity="0.2"/>
+    <text x="-140" y="4" text-anchor="middle" fill="#43B02A" font-family="Arial" font-size="12" font-weight="bold">Selenium</text>
+    
+    <rect x="-40" y="-12" width="80" height="24" rx="12" fill="#6366f1" opacity="0.2"/>
+    <text x="0" y="4" text-anchor="middle" fill="#6366f1" font-family="Arial" font-size="12" font-weight="bold">Local LLM</text>
+    
+    <rect x="100" y="-12" width="80" height="24" rx="12" fill="#D63384" opacity="0.2"/>
+    <text x="140" y="4" text-anchor="middle" fill="#D63384" font-family="Arial" font-size="12" font-weight="bold">Playwright</text>
+  </g>
+</svg>

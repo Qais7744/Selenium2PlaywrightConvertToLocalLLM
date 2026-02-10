@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selenium 2 Playwright | B.L.A.S.T. Converter</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>⚡ Selenium <span class="arrow">→</span> Playwright</h1>
+            <p class="subtitle">Powered by Local LLM (CodeLlama)</p>
+        </header>
+
+        <main class="converter-box">
+            <div class="panel input-panel">
+                <div class="panel-header">
+                    <h2>Input: Java TestNG</h2>
+                    <span class="badge">Java</span>
+                </div>
+                <textarea id="javaCode" placeholder="// Paste your Selenium Java code here..."></textarea>
+            </div>
+
+            <div class="action-bar">
+                <div class="controls">
+                    <select id="languageSelect" class="lang-select">
+                        <option value="typescript">TypeScript</option>
+                        <option value="javascript">JavaScript</option>
+                    </select>
+                    <button id="convertBtn" onclick="convertCode()">
+                        <span id="btnText">Initialize Conversion</span>
+                        <div id="loader" class="spinner hidden"></div>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel output-panel">
+                <div class="panel-header">
+                    <h2>Output: Playwright TS/JS</h2>
+                    <div class="actions">
+                        <span class="badge">TypeScript</span>
+                        <button class="icon-btn" onclick="saveCode()" title="Save to File">💾</button>
+                    </div>
+                </div>
+                <textarea id="tsCode" readonly placeholder="// Playwright code will appear here..."></textarea>
+            </div>
+        </main>
+
+        <footer>
+            <div class="status-bar" id="statusBar">Ready</div>
+        </footer>
+    </div>
+
+    <script>
+        async function convertCode() {
+            const javaCode = document.getElementById('javaCode').value;
+            const btn = document.getElementById('convertBtn');
+            const btnText = document.getElementById('btnText');
+            const loader = document.getElementById('loader');
+            const statusBar = document.getElementById('statusBar');
+            const tsArea = document.getElementById('tsCode');
+
+            if (!javaCode.trim()) {
+                alert("Please paste some Java code first.");
+                return;
+            }
+
+            // UI Loading State
+            const language = document.getElementById('languageSelect').value;
+            const targetBadge = document.querySelector('.output-panel .badge');
+
+            btn.disabled = true;
+            btnText.innerText = "Converting...";
+            loader.classList.remove('hidden');
+            statusBar.innerText = `Processing via Ollama (${language})...`;
+            statusBar.className = "status-bar processing";
+            targetBadge.innerText = language === 'typescript' ? 'TypeScript' : 'JavaScript';
+
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source_code: javaCode,
+                        language: language
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    tsArea.value = data.converted_code;
+                    statusBar.innerText = "Conversion Complete.";
+                    statusBar.className = "status-bar success";
+                } else {
+                    tsArea.value = "// Error: " + data.message;
+                    statusBar.innerText = "Conversion Failed.";
+                    statusBar.className = "status-bar error";
+                }
+            } catch (error) {
+                tsArea.value = "// Network Error: " + error.message;
+                statusBar.innerText = "Network Error.";
+                statusBar.className = "status-bar error";
+            } finally {
+                // UI Reset
+                btn.disabled = false;
+                btnText.innerText = "Initialize Conversion";
+                loader.classList.add('hidden');
+            }
+        }
+
+        async function saveCode() {
+            const tsCode = document.getElementById('tsCode').value;
+            if (!tsCode.trim()) return;
+
+            const filename = prompt("Enter filename:", "converted_test.spec.ts");
+            if (!filename) return;
+
+            try {
+                const response = await fetch('/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ converted_code: tsCode, filename: filename })
+                });
+                const data = await response.json();
+                alert("Saved to: " + data.file_path);
+            } catch (e) {
+                alert("Save failed: " + e.message);
+            }
+        }
+    </script>
+</body>
+
+</html>
