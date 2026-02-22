@@ -1,14 +1,7 @@
 """
-Ultra-Fast Code Converter for Selenium2Playwright
+Fixed Ultra-Fast Code Converter for Selenium2Playwright
 
-This is the FASTEST version with aggressive optimizations:
-- Pre-warmed model to eliminate cold-start latency
-- Shorter prompts for faster LLM inference
-- Request queuing to prevent model thrashing
-- Partial result streaming for immediate feedback
-- Hybrid approach: Regex + LLM for common patterns
-
-Use this when speed is critical over perfect accuracy.
+Properly converts Selenium Java to Playwright TypeScript/JavaScript.
 """
 
 import re
@@ -23,118 +16,135 @@ import aiohttp
 import requests
 
 
-# =============================================================================
-# Aggressive Pre-Processing: Direct Regex Conversion
-# =============================================================================
-
-def get_direct_conversions():
-    """Get regex conversions with proper flag handling."""
-    return [
-        # Driver setup removal
-        (r'WebDriver\s+\w+\s*=\s*new\s+ChromeDriver\(\)[^;]*;', '', 0),
-        (r'driver\.quit\(\)[^;]*;', '', 0),
-        (r'@BeforeMethod[^}]*}', '', re.DOTALL),
-        (r'@AfterMethod[^}]*}', '', re.DOTALL),
-        
-        # Navigation
-        (r'driver\.get\s*\(\s*["\']([^"\']+)["\']\s*\)', r'await page.goto("\1")', 0),
-        
-        # Find elements
-        (r'findElement\s*\(\s*By\.id\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("#\1")', 0),
-        (r'findElement\s*\(\s*By\.cssSelector\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("\1")', 0),
-        (r'findElement\s*\(\s*By\.xpath\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("xpath=\1")', 0),
-        (r'findElement\s*\(\s*By\.className\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator(".\1")', 0),
-        (r'findElement\s*\(\s*By\.name\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("[name=\1]")', 0),
-        (r'findElements\s*\(\s*By\.([^)]+)\)', r'page.locator(/* \1 - use .all() if needed */)', 0),
-        
-        # Actions
-        (r'\.sendKeys\s*\(\s*["\']([^"\']*)["\']\s*\)', r'.fill("\1")', 0),
-        (r'\.click\s*\(\s*\)', '.click()', 0),
-        (r'\.clear\s*\(\s*\)', '.clear()', 0),
-        (r'\.getText\s*\(\s*\)', '.innerText()', 0),
-        (r'\.getAttribute\s*\(\s*["\']([^"\']+)["\']\s*\)', r'.getAttribute("\1")', 0),
-        
-        # Assertions
-        (r'Assert\.assertEquals\s*\(\s*([^,]+),\s*([^)]+)\)', r'expect(\2).toBe(\1)', 0),
-        (r'Assert\.assertTrue\s*\(\s*([^)]+)\)', r'expect(\1).toBeTruthy()', 0),
-        (r'Assert\.assertFalse\s*\(\s*([^)]+)\)', r'expect(\1).toBeFalsy()', 0),
-        
-        # Waits
-        (r'Thread\.sleep\s*\(\s*(\d+)\s*\)', r'await page.waitForTimeout(\1)', 0),
-        (r'WebDriverWait[^;]*?\)', 'await page.waitForSelector(/* selector */)', 0),
-    ]
-
-
 def try_fast_conversion(java_code: str, language: str = "typescript") -> Optional[str]:
     """
-    Attempt direct regex conversion for simple cases.
-    Returns None if code is too complex for regex-only conversion.
-    
-    This bypasses LLM entirely for 50-70% of conversions.
+    Convert simple Selenium Java code to Playwright using regex patterns.
+    Returns None if code is too complex.
     """
     try:
-        result = java_code
-        complexity_score = 0
+        code = java_code
         
-        # Check complexity indicators
-        complexity_indicators = [
-            'class ', 'extends ', 'implements ', 'interface ',
-            'switch', 'case ', 'try {', 'catch', 'finally',
-            'for (', 'while (', 'do {',
-            'stream()', 'map(', 'filter(', 'collect(',
-            '@DataProvider', '@Factory', 'DataProvider'
-        ]
+        # Check if it's simple enough for regex conversion
+        # Skip if has complex patterns
+        complex_patterns = ['try {', 'catch', 'finally', 'switch', 'case ',
+                           'stream()', 'DataProvider', 'for (', 'while (']
+        for pattern in complex_patterns:
+            if pattern in code:
+                return None  # Too complex, use LLM
         
-        for indicator in complexity_indicators:
-            if indicator in java_code:
-                complexity_score += 1
+        # Remove Java imports and package
+        code = re.sub(r'package\s+[\w.]+;', '', code)
+        code = re.sub(r'import\s+[^;]+;', '', code)
         
-        # If too complex, fall back to LLM
-        if complexity_score > 2 or len(java_code) > 500:
-            return None
-        
-        # Apply direct conversions
-        conversions = get_direct_conversions()
-        for pattern, replacement, flags in conversions:
-            result = re.sub(pattern, replacement, result, flags=flags)
-        
-        # Convert @Test annotations
-        result = re.sub(
-            r'@Test[^\n]*\n\s*(public\s+)?void\s+(\w+)\s*\(',
-            r"test('\2', async ({ page }) => {",
-            result
+        # Convert @Test annotation and method signature
+        # Pattern: @Test [optional stuff] public void methodName() {
+        code = re.sub(
+            r'@Test(?:\([^)]*\))?\s*\n\s*public\s+void\s+(\w+)\s*\(\s*\)\s*{',
+            r"test('\1', async ({ page }) => {",
+            code
         )
         
-        # Add async/await (simple approach)
-        lines = result.split('\n')
-        new_lines = []
-        for line in lines:
-            stripped = line.strip()
-            # Skip comments, imports, empty lines, and lines that already have await
-            if (stripped and 
-                not stripped.startswith('//') and 
-                not stripped.startswith('/*') and 
-                not stripped.startswith('*') and 
-                not stripped.startswith('import') and
-                not stripped.startswith('const') and
-                not stripped.startswith('let') and
-                not stripped.startswith('var') and
-                not stripped.startswith('await') and
-                not stripped.startswith('test(') and
-                not stripped.startswith('});')):
-                # Check if line starts with method call or variable
-                if re.match(r'^\s*(driver|page|element|\w+)\.', stripped):
-                    line = re.sub(r'^(\s+)(\w+)', r'\1await \2', line)
-            new_lines.append(line)
-        result = '\n'.join(new_lines)
+        # Remove WebDriver setup lines
+        code = re.sub(r'\s*WebDriver\s+\w+\s*=\s*new\s+\w+Driver\([^)]*\)\s*;\s*\n?', '\n', code)
+        code = re.sub(r'\s*driver\.quit\(\)\s*;\s*\n?', '\n', code)
         
-        # Clean up Java syntax
-        result = re.sub(r'\);\s*$', '});', result, flags=re.MULTILINE)
-        result = re.sub(r'public\s+', '', result)
-        result = re.sub(r'private\s+', '', result)
-        result = re.sub(r'protected\s+', '', result)
-        result = re.sub(r'String\s+(\w+)', r'const \1', result)
-        result = re.sub(r'WebElement\s+(\w+)', r'const \1', result)
+        # Convert driver.get() -> await page.goto()
+        code = re.sub(
+            r'driver\.get\s*\(\s*"([^"]+)"\s*\)',
+            r'await page.goto("\1")',
+            code
+        )
+        
+        # Convert findElement(By.id()) -> page.locator()
+        code = re.sub(
+            r'driver\.findElement\s*\(\s*By\.id\s*\(\s*"([^"]+)"\s*\)\s*\)',
+            r'page.locator("#\1")',
+            code
+        )
+        
+        # Convert findElement(By.cssSelector()) -> page.locator()
+        code = re.sub(
+            r'driver\.findElement\s*\(\s*By\.cssSelector\s*\(\s*"([^"]+)"\s*\)\s*\)',
+            r'page.locator("\1")',
+            code
+        )
+        
+        # Convert findElement(By.xpath()) -> page.locator()
+        code = re.sub(
+            r'driver\.findElement\s*\(\s*By\.xpath\s*\(\s*"([^"]+)"\s*\)\s*\)',
+            r'page.locator("xpath=\1")',
+            code
+        )
+        
+        # Convert findElement(By.className()) -> page.locator()
+        code = re.sub(
+            r'driver\.findElement\s*\(\s*By\.className\s*\(\s*"([^"]+)"\s*\)\s*\)',
+            r'page.locator(".\1")',
+            code
+        )
+        
+        # Convert findElement(By.name()) -> page.locator()
+        code = re.sub(
+            r'driver\.findElement\s*\(\s*By\.name\s*\(\s*"([^"]+)"\s*\)\s*\)',
+            r'page.locator("[name=\1]")',
+            code
+        )
+        
+        # Convert .sendKeys() -> .fill()
+        code = re.sub(
+            r'\.sendKeys\s*\(\s*"([^"]*)"\s*\)',
+            r'.fill("\1")',
+            code
+        )
+        
+        # Convert .click() -> .click()
+        # (already same, but ensure no extra args)
+        code = re.sub(r'\.click\s*\(\s*\)', '.click()', code)
+        
+        # Convert .getText() -> .innerText()
+        code = re.sub(r'\.getText\s*\(\s*\)', '.innerText()', code)
+        
+        # Add await to page operations
+        code = re.sub(r'^(\s+)(page\.locator)', r'\1await \2', code, flags=re.MULTILINE)
+        code = re.sub(r'^(\s+)(page\.goto)', r'\1await \2', code, flags=re.MULTILINE)
+        
+        # Convert Assert.assertEquals -> expect().toBe()
+        code = re.sub(
+            r'Assert\.assertEquals\s*\(\s*"([^"]+)"\s*,\s*([^)]+)\)',
+            r'expect(\2).toBe("\1")',
+            code
+        )
+        
+        # Convert Thread.sleep() -> await page.waitForTimeout()
+        code = re.sub(
+            r'Thread\.sleep\s*\(\s*(\d+)\s*\)',
+            r'await page.waitForTimeout(\1)',
+            code
+        )
+        
+        # Clean up remaining Java syntax
+        code = re.sub(r'\bString\s+(\w+)', r'const \1', code)
+        code = re.sub(r'\bWebElement\s+(\w+)', r'const \1', code)
+        
+        # Remove empty lines
+        code = re.sub(r'\n{3,}', '\n\n', code)
+        
+        # Ensure proper closing brace
+        # Count opening and closing braces
+        open_braces = code.count('{')
+        close_braces = code.count('}')
+        
+        # Add missing closing braces
+        while close_braces < open_braces:
+            code = code.rstrip() + '\n}'
+            close_braces += 1
+        
+        # Ensure final }); for test block
+        if not code.rstrip().endswith('});'):
+            if code.rstrip().endswith('}'):
+                code = code.rstrip()[:-1] + '});'
+            else:
+                code = code.rstrip() + '\n});'
         
         # Add Playwright imports
         is_ts = language.lower() == "typescript"
@@ -143,25 +153,21 @@ def try_fast_conversion(java_code: str, language: str = "typescript") -> Optiona
         else:
             imports = "const { test, expect } = require('@playwright/test');\n\n"
         
-        result = imports + result
+        final_code = imports + code.strip()
         
-        # Basic validation - check if result looks reasonable
-        if len(result) < 50 or 'page.' not in result:
+        # Validate output
+        if 'page.' not in final_code or 'test(' not in final_code:
             return None
-            
-        return result
+        
+        return final_code
         
     except Exception as e:
         print(f"Fast conversion error: {e}")
         return None
 
 
-# =============================================================================
-# Optimized LLM Client with Keep-Alive
-# =============================================================================
-
 class FastOllamaClient:
-    """Ultra-fast Ollama client with connection reuse and model warming."""
+    """Ollama client with connection reuse and model warming."""
     
     def __init__(self, base_url: str = "http://localhost:11434", model: str = "qwen2.5-coder:0.5b"):
         self.base_url = base_url
@@ -188,10 +194,7 @@ class FastOllamaClient:
         return self._session
     
     async def warm_up(self):
-        """
-        Send a dummy request to warm up the model.
-        This eliminates cold-start latency for real conversions.
-        """
+        """Send a dummy request to warm up the model."""
         if self._model_warmed:
             return
         
@@ -235,7 +238,7 @@ class FastOllamaClient:
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
-                "top_k": 20,  # Lower = faster
+                "top_k": 20,
                 "top_p": 0.9,
                 "repeat_penalty": 1.0,
             }
@@ -254,12 +257,8 @@ class FastOllamaClient:
             await self._session.close()
 
 
-# =============================================================================
-# Fast Converter
-# =============================================================================
-
 class FastConverter:
-    """Ultra-fast converter with hybrid approach."""
+    """Fast converter with hybrid approach."""
     
     def __init__(self, model: str = "qwen2.5-coder:0.5b"):
         self.client = FastOllamaClient(model=model)
@@ -272,8 +271,8 @@ class FastConverter:
         """Generate cache key."""
         return hashlib.md5(f"{code}:{lang}".encode()).hexdigest()
     
-    def _build_minimal_prompt(self, code: str, lang: str) -> str:
-        """Build the shortest possible effective prompt."""
+    def _build_prompt(self, code: str, lang: str) -> str:
+        """Build conversion prompt."""
         lang_cap = "TypeScript" if lang == "typescript" else "JavaScript"
         
         return f"""Convert this Selenium Java test to Playwright {lang_cap}:
@@ -282,18 +281,50 @@ class FastConverter:
 {code}
 ```
 
-Rules:
-1. Use async/await
-2. Use page.locator() for elements
-3. Use test() from @playwright/test
-4. Return only the code, no explanations
+Conversion rules:
+1. Use `test('name', async ({{ page }}) => {{ ... }})` format
+2. Use `await page.goto()` for navigation
+3. Use `page.locator()` with CSS selectors (e.g., `#id`, `.class`)
+4. Use `.fill()` for input, `.click()` for clicking
+5. Add proper imports: `import {{ test, expect }} from '@playwright/test'`
+6. Return ONLY the code, no explanations
 
-Playwright {lang_cap} output:"""
+Playwright {lang_cap} code:"""
+    
+    def _extract_code(self, raw_output: str, language: str) -> str:
+        """Extract and clean code from LLM output."""
+        result = raw_output.strip()
+        
+        # Try to extract code blocks
+        patterns = [
+            r'```(?:typescript|javascript|ts|js)?\s*\n?(.*?)\n?```',
+            r'```\s*\n?(.*?)\n?```',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, raw_output, re.DOTALL | re.IGNORECASE)
+            if match:
+                result = match.group(1).strip()
+                break
+        
+        # Clean up common LLM mistakes
+        # Fix double opening braces like {) {
+        result = re.sub(r'\{\)\s*\{', ' {', result)
+        # Fix misplaced braces in strings
+        result = re.sub(r'"([^"]*)"\}', r'"\1")', result)
+        result = re.sub(r'\)"\}', ')"', result)
+        
+        # Add imports if missing
+        if 'import' not in result and 'require' not in result:
+            if language == "typescript":
+                result = "import { test, expect } from '@playwright/test';\n\n" + result
+            else:
+                result = "const { test, expect } = require('@playwright/test');\n\n" + result
+        
+        return result
     
     async def convert(self, java_code: str, language: str = "typescript") -> Dict[str, Any]:
-        """
-        Convert with multiple speed optimizations.
-        """
+        """Convert Java code to Playwright."""
         start = time.time()
         
         # Clean input
@@ -329,7 +360,7 @@ Playwright {lang_cap} output:"""
             }
         
         # 3. Fall back to LLM for complex cases
-        prompt = self._build_minimal_prompt(java_code, language)
+        prompt = self._build_prompt(java_code, language)
         
         try:
             raw_output = await self.client.generate(
@@ -338,27 +369,7 @@ Playwright {lang_cap} output:"""
                 temperature=0.1
             )
             
-            # Extract code - try multiple patterns
-            result = raw_output.strip()
-            
-            # Try to extract code blocks
-            patterns = [
-                r'```(?:typescript|javascript|ts|js)?\s*\n?(.*?)\n?```',
-                r'```\s*\n?(.*?)\n?```',
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, raw_output, re.DOTALL | re.IGNORECASE)
-                if match:
-                    result = match.group(1).strip()
-                    break
-            
-            # Add imports if missing
-            if 'import' not in result and 'require' not in result:
-                if language == "typescript":
-                    result = "import { test, expect } from '@playwright/test';\n\n" + result
-                else:
-                    result = "const { test, expect } = require('@playwright/test');\n\n" + result
+            result = self._extract_code(raw_output, language)
             
             self._llm_conversions += 1
             self._cache[cache_key] = result
@@ -393,10 +404,7 @@ Playwright {lang_cap} output:"""
         await self.client.close()
 
 
-# =============================================================================
-# Backward Compatible Interface
-# =============================================================================
-
+# Singleton instance
 _converter: Optional[FastConverter] = None
 
 
@@ -409,16 +417,12 @@ def get_converter() -> FastConverter:
 
 
 def convert_code(java_code: str, language: str = "typescript", **kwargs) -> str:
-    """
-    Synchronous interface for compatibility.
-    """
+    """Synchronous interface for compatibility."""
     converter = get_converter()
     
     try:
-        # Try to get existing event loop
         loop = asyncio.get_event_loop()
     except RuntimeError:
-        # Create new loop if none exists
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     
@@ -430,17 +434,9 @@ def convert_code(java_code: str, language: str = "typescript", **kwargs) -> str:
         return f"// Error: {result.get('message', 'Unknown error')}"
 
 
-# Legacy compatibility
-clean_java_code = lambda x: x  # No-op, handled internally
-
-
-# =============================================================================
-# Test
-# =============================================================================
-
 if __name__ == "__main__":
-    test_code = """
-@Test
+    # Test with the example
+    test_code = '''@Test
 public void testLogin() {
     WebDriver driver = new ChromeDriver();
     driver.get("https://example.com/login");
@@ -448,13 +444,18 @@ public void testLogin() {
     driver.findElement(By.id("password")).sendKeys("secret");
     driver.findElement(By.cssSelector("button[type='submit']")).click();
     driver.quit();
-}
-"""
+}'''
     
     print("Testing FAST converter...")
-    print("="*50)
+    print("="*60)
+    print("Input:")
+    print(test_code)
+    print("\n" + "="*60)
     
     result = convert_code(test_code, "typescript")
-    print(f"\nResult:\n{result}")
-    print("\n" + "="*50)
-    print(f"Stats: {get_converter().get_stats()}")
+    print("\nOutput:")
+    print(result)
+    print("\n" + "="*60)
+    
+    stats = get_converter().get_stats()
+    print(f"Stats: {stats}")
