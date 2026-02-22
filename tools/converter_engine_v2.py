@@ -8,53 +8,10 @@ any Java-specific syntax or functions.
 import re
 import json
 import time
-import asyncio
 import hashlib
-from typing import Optional, Dict, Any, Tuple
-from dataclasses import dataclass
+from typing import Optional, Dict, Any
 
-import aiohttp
-
-
-def remove_java_only_code(code: str) -> str:
-    """
-    Remove Java-only code that has no Playwright equivalent.
-    This is more aggressive than pattern matching.
-    """
-    lines = code.split('\n')
-    result_lines = []
-    
-    for line in lines:
-        original = line
-        stripped = line.strip()
-        
-        # Skip lines that are purely Java setup
-        skip_patterns = [
-            r'System\.setProperty\s*\(',
-            r'System\.getProperty\s*\(',
-            r'webdriver\.chrome\.driver',
-            r'webdriver\.gecko\.driver',
-            r'chromedriver',
-            r'geckodriver',
-            r'ChromeDriver\s*\(',
-            r'FirefoxDriver\s*\(',
-            r'EdgeDriver\s*\(',
-            r'SafariDriver\s*\(',
-            r'InternetExplorerDriver\s*\(',
-            r'WebDriver\s+\w+\s*=',
-            r'new\s+\w+Driver\s*\(',
-        ]
-        
-        should_skip = False
-        for pattern in skip_patterns:
-            if re.search(pattern, stripped, re.IGNORECASE):
-                should_skip = True
-                break
-        
-        if not should_skip:
-            result_lines.append(original)
-    
-    return '\n'.join(result_lines)
+import requests
 
 
 # =============================================================================
@@ -244,9 +201,46 @@ CONVERSIONS = [
 ]
 
 
-# =============================================================================
-# Try-Catch-Finally Conversion
-# =============================================================================
+def remove_java_only_code(code: str) -> str:
+    """
+    Remove Java-only code that has no Playwright equivalent.
+    This is more aggressive than pattern matching.
+    """
+    lines = code.split('\n')
+    result_lines = []
+    
+    for line in lines:
+        original = line
+        stripped = line.strip()
+        
+        # Skip lines that are purely Java setup
+        skip_patterns = [
+            r'System\.setProperty\s*\(',
+            r'System\.getProperty\s*\(',
+            r'webdriver\.chrome\.driver',
+            r'webdriver\.gecko\.driver',
+            r'chromedriver',
+            r'geckodriver',
+            r'ChromeDriver\s*\(',
+            r'FirefoxDriver\s*\(',
+            r'EdgeDriver\s*\(',
+            r'SafariDriver\s*\(',
+            r'InternetExplorerDriver\s*\(',
+            r'WebDriver\s+\w+\s*=',
+            r'new\s+\w+Driver\s*\(',
+        ]
+        
+        should_skip = False
+        for pattern in skip_patterns:
+            if re.search(pattern, stripped, re.IGNORECASE):
+                should_skip = True
+                break
+        
+        if not should_skip:
+            result_lines.append(original)
+    
+    return '\n'.join(result_lines)
+
 
 def convert_try_catch(code: str) -> str:
     """Convert Java try-catch-finally to JavaScript."""
@@ -266,10 +260,6 @@ def convert_try_catch(code: str) -> str:
     
     return code
 
-
-# =============================================================================
-# Main Conversion Function
-# =============================================================================
 
 def convert_java_to_playwright(java_code: str, language: str = "typescript") -> str:
     """
@@ -457,64 +447,105 @@ def add_imports(code: str, language: str) -> str:
 
 
 # =============================================================================
-# Ollama Client (for complex cases)
+# LLM Fallback (using sync requests to avoid async issues)
 # =============================================================================
 
-class OllamaClient:
-    """Ollama client for fallback conversion."""
+def llm_convert_sync(java_code: str, language: str, model: str = "qwen2.5-coder:0.5b") -> Dict[str, Any]:
+    """Use LLM for complex conversions (sync version to avoid async issues)."""
+    lang_name = "TypeScript" if language == "typescript" else "JavaScript"
     
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = "qwen2.5-coder:0.5b"):
-        self.base_url = base_url
-        self.model = model
-        self.generate_url = f"{base_url}/api/generate"
-        self._session = None
+    prompt = f"""Convert this Java Selenium code to Playwright {lang_name}.
+
+CRITICAL RULES:
+1. REMOVE all Java-specific code:
+   - System.setProperty
+   - WebDriver setup
+   - public static void main
+   - Exception types in catch
+   - printStackTrace
+   - driver.quit
+
+2. CONVERT these patterns:
+   - driver.get() -> await page.goto()
+   - driver.getTitle() -> await page.title()
+   - System.out.println() -> console.log()
+   - Thread.sleep() -> await page.waitForTimeout()
+   - try-catch -> try-catch (with JS syntax)
+   - catch (Exception e) -> catch (error)
+   - e.printStackTrace() -> console.error(error)
+
+3. REMOVE empty finally blocks
+
+4. Return ONLY valid code, no explanations.
+
+Java code:
+```java
+{java_code}
+```
+
+Playwright {lang_name} code:"""
     
-    async def _get_session(self):
-        if self._session is None or self._session.closed:
-            connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
-            timeout = aiohttp.ClientTimeout(total=60, connect=5)
-            self._session = aiohttp.ClientSession(connector=connector, timeout=timeout)
-        return self._session
-    
-    async def generate(self, prompt: str, max_tokens: int = 2048) -> str:
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": 0.1,
-                "num_predict": max_tokens,
-            }
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.1,
+                    "num_predict": 2048,
+                }
+            },
+            timeout=120  # 2 minute timeout for large code
+        )
+        response.raise_for_status()
+        data = response.json()
+        raw = data.get("response", "")
+        
+        # Extract code
+        match = re.search(r'```(?:typescript|javascript)?\s*\n?(.*?)\n?```', raw, re.DOTALL)
+        if match:
+            result = match.group(1).strip()
+        else:
+            result = raw.strip()
+        
+        # Add imports if missing
+        if 'import' not in result and 'require' not in result:
+            if language == "typescript":
+                result = "import { test, expect } from '@playwright/test';\n\n" + result
+            else:
+                result = "const { test, expect } = require('@playwright/test');\n\n" + result
+        
+        return {
+            "status": "success",
+            "converted_code": result,
+            "method": "llm"
         }
         
-        session = await self._get_session()
-        
-        async with session.post(self.generate_url, json=payload) as response:
-            response.raise_for_status()
-            data = await response.json()
-            return data.get("response", "")
-    
-    async def close(self):
-        if self._session and not self._session.closed:
-            await self._session.close()
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 
 # =============================================================================
-# Main Converter Class
+# Main Converter Class (Sync version - no async)
 # =============================================================================
 
 class CodeConverter:
     """Main converter with pattern matching + LLM fallback."""
     
     def __init__(self, model: str = "qwen2.5-coder:0.5b"):
-        self.client = OllamaClient(model=model)
+        self.model = model
         self._cache = {}
     
     def _get_cache_key(self, code: str, lang: str) -> str:
         return hashlib.md5(f"{code}:{lang}".encode()).hexdigest()
     
-    async def convert(self, java_code: str, language: str = "typescript") -> Dict[str, Any]:
-        """Convert Java code to Playwright."""
+    def convert(self, java_code: str, language: str = "typescript") -> Dict[str, Any]:
+        """Convert Java code to Playwright (sync version)."""
         start = time.time()
         
         if not java_code or not java_code.strip():
@@ -546,8 +577,14 @@ class CodeConverter:
         except Exception as e:
             print(f"Pattern conversion failed: {e}")
         
-        # Fallback to LLM for very complex cases
-        return await self._llm_convert(java_code, language, start)
+        # Fallback to LLM for very complex cases (sync call)
+        llm_result = llm_convert_sync(java_code, language, self.model)
+        llm_result['time'] = round(time.time() - start, 3)
+        
+        if llm_result['status'] == 'success':
+            self._cache[cache_key] = llm_result['converted_code']
+        
+        return llm_result
     
     def _is_valid_conversion(self, result: str, original: str) -> bool:
         """Check if conversion looks valid."""
@@ -568,71 +605,6 @@ class CodeConverter:
                 return False
         
         return True
-    
-    async def _llm_convert(self, java_code: str, language: str, start_time: float) -> Dict[str, Any]:
-        """Use LLM for complex conversions."""
-        lang_name = "TypeScript" if language == "typescript" else "JavaScript"
-        
-        prompt = f"""Convert this Java Selenium code to Playwright {lang_name}.
-
-CRITICAL RULES:
-1. REMOVE all Java-specific code:
-   - System.setProperty
-   - WebDriver setup
-   - public static void main
-   - Exception types in catch
-   - printStackTrace
-   - driver.quit
-
-2. CONVERT these patterns:
-   - driver.get() -> await page.goto()
-   - driver.getTitle() -> await page.title()
-   - System.out.println() -> console.log()
-   - Thread.sleep() -> await page.waitForTimeout()
-   - try-catch -> try-catch (with JS syntax)
-   - catch (Exception e) -> catch (error)
-   - e.printStackTrace() -> console.error(error)
-
-3. REMOVE empty finally blocks
-
-4. Return ONLY valid code, no explanations.
-
-Java code:
-```java
-{java_code}
-```
-
-Playwright {lang_name} code:"""
-        
-        try:
-            raw = await self.client.generate(prompt)
-            
-            # Extract code
-            match = re.search(r'```(?:typescript|javascript)?\s*\n?(.*?)\n?```', raw, re.DOTALL)
-            if match:
-                result = match.group(1).strip()
-            else:
-                result = raw.strip()
-            
-            cache_key = self._get_cache_key(java_code, "typescript")
-            self._cache[cache_key] = result
-            
-            return {
-                "status": "success",
-                "converted_code": result,
-                "method": "llm",
-                "time": round(time.time() - start_time, 3)
-            }
-            
-        except Exception as e:
-            return {
-                "status": "error",
-                "message": str(e),
-                "time": round(time.time() - start_time, 3)
-            }
-    
-    async def close(self):
-        await self._session.close()
 
 
 # =============================================================================
@@ -652,14 +624,7 @@ def get_converter():
 def convert_code(java_code: str, language: str = "typescript") -> str:
     """Synchronous conversion interface."""
     converter = get_converter()
-    
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    result = loop.run_until_complete(converter.convert(java_code, language))
+    result = converter.convert(java_code, language)
     
     if result['status'] == 'success':
         return result['converted_code']
@@ -701,7 +666,7 @@ public class SimpleSeleniumTest {
     # Verify no Java code remains
     print("\n" + "="*60)
     print("VALIDATION:")
-    java_patterns = ['System.setProperty', 'WebDriver ', 'Exception e)', 'printStackTrace']
+    java_patterns = ['System.setProperty', 'WebDriver ', 'Exception e)', 'printStackTrace', 'chromedriver']
     for pattern in java_patterns:
         if pattern in result:
             print(f"  FAIL: Found '{pattern}' in output")

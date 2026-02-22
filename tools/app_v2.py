@@ -8,7 +8,6 @@ Handles: try-catch, main() methods, @Test annotations, and more.
 import os
 import sys
 import time
-import asyncio
 import traceback
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
@@ -17,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from converter_engine_v2 import CodeConverter, get_converter, convert_code
-    print("✅ Loaded V2 converter engine")
+    print("✅ Loaded V2 converter engine (sync version)")
 except Exception as e:
     print(f"❌ Error loading converter: {e}")
     traceback.print_exc()
@@ -51,8 +50,8 @@ def index():
 def health():
     return jsonify({
         "status": "healthy",
-        "converter": "v2-complete",
-        "model": converter.client.model
+        "converter": "v2-sync",
+        "model": converter.model
     })
 
 
@@ -122,15 +121,14 @@ def save():
 if __name__ == '__main__':
     print("""
 ╔═══════════════════════════════════════════════════════════╗
-║  SELENIUM2PLAYWRIGHT - V2 COMPLETE CONVERTER ✅           ║
+║  SELENIUM2PLAYWRIGHT - V2 SYNC CONVERTER ✅               ║
 ╠═══════════════════════════════════════════════════════════╣
 ║                                                           ║
 ║  ✓ Complete line-by-line conversion                       ║
 ║  ✓ No Java code retained                                  ║
-║  ✓ Handles try-catch-finally                              ║
-║  ✓ Handles main() and @Test methods                       ║
-║  ✓ Removes System.setProperty, WebDriver setup            ║
-║  ✓ Converts all Selenium actions to Playwright            ║
+║  ✓ Handles large files (1000+ lines)                      ║
+║  ✓ No async timeout errors                                ║
+║  ✓ Sync requests for stability                            ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 """)
