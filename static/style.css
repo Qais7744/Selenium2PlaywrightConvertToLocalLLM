@@ -361,6 +361,27 @@ body {
     opacity: 0.5;
 }
 
+/* Fast Mode Button */
+.convert-btn.fast-mode {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    padding: 8px 16px;
+    font-size: 0.8125rem;
+}
+
+.convert-btn.fast-mode:hover {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+.convert-btn.fast-mode i {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 /* Spinner */
 .spinner {
     width: 18px;

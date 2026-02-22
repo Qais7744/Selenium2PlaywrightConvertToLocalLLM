@@ -68,6 +68,12 @@
                         </div>
                         <div id="loader" class="spinner hidden"></div>
                     </button>
+                    <button id="convertFastBtn" class="convert-btn fast-mode" onclick="convertCodeFast()" title="Ultra-fast mode (regex + cache)">
+                        <div class="btn-content">
+                            <i class="ph ph-lightning"></i>
+                            <span>Fast Convert</span>
+                        </div>
+                    </button>
                 </div>
             </div>
 
@@ -247,6 +253,54 @@
             } else {
                 statusIndicator.innerHTML = '<i class="ph ph-circle"></i> Ready';
                 statusIndicator.className = 'status-indicator';
+            }
+        }
+
+        async function convertCodeFast() {
+            const javaCode = document.getElementById('javaCode').value;
+            const btn = document.getElementById('convertFastBtn');
+            const tsArea = document.getElementById('tsCode');
+
+            if (!javaCode.trim()) {
+                updateStatus('Please enter some Java code first', 'error');
+                shakeElement(document.querySelector('.input-panel'));
+                return;
+            }
+
+            btn.disabled = true;
+            btn.classList.add('loading');
+            updateStatus('Fast converting (regex + cache)...', 'processing');
+
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source_code: javaCode,
+                        language: currentLang,
+                        fast: true
+                    })
+                });
+
+                const data = await response.json();
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+
+                if (data.status === 'success') {
+                    tsArea.value = data.converted_code;
+                    updateLineNumbers('outputLines', tsArea);
+                    updateStatus(`Fast conversion complete in ${elapsed}s!`, 'success');
+                } else {
+                    tsArea.value = "// Error: " + data.message;
+                    updateStatus('Conversion failed: ' + data.message, 'error');
+                }
+            } catch (error) {
+                tsArea.value = "// Network Error: " + error.message;
+                updateStatus('Network error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('loading');
             }
         }
 
