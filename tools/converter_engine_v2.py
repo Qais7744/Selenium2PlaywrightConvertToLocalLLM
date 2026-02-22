@@ -16,14 +16,56 @@ from dataclasses import dataclass
 import aiohttp
 
 
+def remove_java_only_code(code: str) -> str:
+    """
+    Remove Java-only code that has no Playwright equivalent.
+    This is more aggressive than pattern matching.
+    """
+    lines = code.split('\n')
+    result_lines = []
+    
+    for line in lines:
+        original = line
+        stripped = line.strip()
+        
+        # Skip lines that are purely Java setup
+        skip_patterns = [
+            r'System\.setProperty\s*\(',
+            r'System\.getProperty\s*\(',
+            r'webdriver\.chrome\.driver',
+            r'webdriver\.gecko\.driver',
+            r'chromedriver',
+            r'geckodriver',
+            r'ChromeDriver\s*\(',
+            r'FirefoxDriver\s*\(',
+            r'EdgeDriver\s*\(',
+            r'SafariDriver\s*\(',
+            r'InternetExplorerDriver\s*\(',
+            r'WebDriver\s+\w+\s*=',
+            r'new\s+\w+Driver\s*\(',
+        ]
+        
+        should_skip = False
+        for pattern in skip_patterns:
+            if re.search(pattern, stripped, re.IGNORECASE):
+                should_skip = True
+                break
+        
+        if not should_skip:
+            result_lines.append(original)
+    
+    return '\n'.join(result_lines)
+
+
 # =============================================================================
 # Complete Java to Playwright Mapping
 # =============================================================================
 
 # Java code patterns to REMOVE completely (not convert)
 REMOVE_PATTERNS = [
-    # System properties
-    (r'System\.setProperty\s*\([^)]+\)\s*;\s*\n?', ''),
+    # System properties - remove ENTIRE line including chromedriver path
+    (r'System\.setProperty\s*\(\s*"[^"]+"\s*,\s*"[^"]*chromedriver[^"]*"\s*\)\s*;\s*\n?', '', re.IGNORECASE),
+    (r'System\.setProperty\s*\(\s*"[^"]+"\s*,\s*"[^"]+"\s*\)\s*;\s*\n?', ''),
     (r'System\.getProperty\s*\([^)]+\)\s*;\s*\n?', ''),
     
     # WebDriver setup (Playwright handles this automatically)
@@ -39,6 +81,10 @@ REMOVE_PATTERNS = [
     
     # Most imports (will be replaced with Playwright imports)
     (r'import\s+(?!java\.time|java\.net)[^;]+;\s*\n?', ''),
+    
+    # Remove ANY references to chromedriver/geckodriver paths in strings
+    (r'"[^"]*chromedriver[^"]*"', '""'),
+    (r'"[^"]*geckodriver[^"]*"', '""'),
 ]
 
 # Java to Playwright conversions
@@ -235,9 +281,13 @@ def convert_java_to_playwright(java_code: str, language: str = "typescript") -> 
     is_main_method = 'public static void main' in result
     has_test_annotation = '@Test' in result
     
-    # Step 1: Remove Java-specific code
-    for pattern, replacement in REMOVE_PATTERNS:
-        result = re.sub(pattern, replacement, result, flags=re.MULTILINE)
+    # Step 0: Aggressively remove Java-only code (chromedriver, WebDriver setup, etc.)
+    result = remove_java_only_code(result)
+    
+    # Step 1: Remove Java-specific code patterns
+    for pattern, replacement, *flags in REMOVE_PATTERNS:
+        flag = flags[0] if flags else 0
+        result = re.sub(pattern, replacement, result, flags=flag)
     
     # Step 2: Convert try-catch blocks
     result = convert_try_catch(result)

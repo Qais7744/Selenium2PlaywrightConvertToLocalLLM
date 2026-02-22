@@ -51,6 +51,9 @@ java_patterns = [
     ('printStackTrace', 'printStackTrace'),
     ('driver.quit', 'driver.quit'),
     ('public static void main', 'public static void main'),
+    ('chromedriver', 'chromedriver'),
+    ('geckodriver', 'geckodriver'),
+    ('executablePath', 'executablePath'),
 ]
 
 all_pass = True
