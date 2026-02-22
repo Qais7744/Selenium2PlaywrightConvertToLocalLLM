@@ -27,41 +27,42 @@ import requests
 # Aggressive Pre-Processing: Direct Regex Conversion
 # =============================================================================
 
-# Direct regex replacements for common patterns (bypass LLM entirely for simple cases)
-DIRECT_CONVERSIONS = [
-    # Driver setup removal
-    (r'WebDriver\s+\w+\s*=\s*new\s+ChromeDriver\(\)[^;]*;', ''),
-    (r'driver\.quit\(\)[^;]*;', ''),
-    (r'@BeforeMethod[^}]*}', '', re.DOTALL),
-    (r'@AfterMethod[^}]*}', '', re.DOTALL),
-    
-    # Navigation
-    (r'driver\.get\s*\(\s*["\']([^"\']+)["\']\s*\)', r'await page.goto("\1")'),
-    
-    # Find elements
-    (r'findElement\s*\(\s*By\.id\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("#\1")'),
-    (r'findElement\s*\(\s*By\.cssSelector\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("\1")'),
-    (r'findElement\s*\(\s*By\.xpath\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("xpath=\1")'),
-    (r'findElement\s*\(\s*By\.className\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator(".\1")'),
-    (r'findElement\s*\(\s*By\.name\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("[name=\1]")'),
-    (r'findElements\s*\(\s*By\.([^)]+)\)', r'page.locator(/* \1 - use .all() if needed */)'),
-    
-    # Actions
-    (r'\.sendKeys\s*\(\s*["\']([^"\']*)["\']\s*\)', r'.fill("\1")'),
-    (r'\.click\s*\(\s*\)', '.click()'),
-    (r'\.clear\s*\(\s*\)', '.clear()'),
-    (r'\.getText\s*\(\s*\)', '.innerText()'),
-    (r'\.getAttribute\s*\(\s*["\']([^"\']+)["\']\s*\)', r'.getAttribute("\1")'),
-    
-    # Assertions
-    (r'Assert\.assertEquals\s*\(\s*([^,]+),\s*([^)]+)\)', r'expect(\2).toBe(\1)'),
-    (r'Assert\.assertTrue\s*\(\s*([^)]+)\)', r'expect(\1).toBeTruthy()'),
-    (r'Assert\.assertFalse\s*\(\s*([^)]+)\)', r'expect(\1).toBeFalsy()'),
-    
-    # Waits
-    (r'Thread\.sleep\s*\(\s*(\d+)\s*\)', r'await page.waitForTimeout(\1)'),
-    (r'WebDriverWait[^;]*?\)', 'await page.waitForSelector(/* selector */)'),
-]
+def get_direct_conversions():
+    """Get regex conversions with proper flag handling."""
+    return [
+        # Driver setup removal
+        (r'WebDriver\s+\w+\s*=\s*new\s+ChromeDriver\(\)[^;]*;', '', 0),
+        (r'driver\.quit\(\)[^;]*;', '', 0),
+        (r'@BeforeMethod[^}]*}', '', re.DOTALL),
+        (r'@AfterMethod[^}]*}', '', re.DOTALL),
+        
+        # Navigation
+        (r'driver\.get\s*\(\s*["\']([^"\']+)["\']\s*\)', r'await page.goto("\1")', 0),
+        
+        # Find elements
+        (r'findElement\s*\(\s*By\.id\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("#\1")', 0),
+        (r'findElement\s*\(\s*By\.cssSelector\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("\1")', 0),
+        (r'findElement\s*\(\s*By\.xpath\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("xpath=\1")', 0),
+        (r'findElement\s*\(\s*By\.className\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator(".\1")', 0),
+        (r'findElement\s*\(\s*By\.name\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)', r'page.locator("[name=\1]")', 0),
+        (r'findElements\s*\(\s*By\.([^)]+)\)', r'page.locator(/* \1 - use .all() if needed */)', 0),
+        
+        # Actions
+        (r'\.sendKeys\s*\(\s*["\']([^"\']*)["\']\s*\)', r'.fill("\1")', 0),
+        (r'\.click\s*\(\s*\)', '.click()', 0),
+        (r'\.clear\s*\(\s*\)', '.clear()', 0),
+        (r'\.getText\s*\(\s*\)', '.innerText()', 0),
+        (r'\.getAttribute\s*\(\s*["\']([^"\']+)["\']\s*\)', r'.getAttribute("\1")', 0),
+        
+        # Assertions
+        (r'Assert\.assertEquals\s*\(\s*([^,]+),\s*([^)]+)\)', r'expect(\2).toBe(\1)', 0),
+        (r'Assert\.assertTrue\s*\(\s*([^)]+)\)', r'expect(\1).toBeTruthy()', 0),
+        (r'Assert\.assertFalse\s*\(\s*([^)]+)\)', r'expect(\1).toBeFalsy()', 0),
+        
+        # Waits
+        (r'Thread\.sleep\s*\(\s*(\d+)\s*\)', r'await page.waitForTimeout(\1)', 0),
+        (r'WebDriverWait[^;]*?\)', 'await page.waitForSelector(/* selector */)', 0),
+    ]
 
 
 def try_fast_conversion(java_code: str, language: str = "typescript") -> Optional[str]:
@@ -71,58 +72,88 @@ def try_fast_conversion(java_code: str, language: str = "typescript") -> Optiona
     
     This bypasses LLM entirely for 50-70% of conversions.
     """
-    result = java_code
-    complexity_score = 0
-    
-    # Check complexity indicators
-    complexity_indicators = [
-        'class ', 'extends ', 'implements ', 'interface ',
-        'switch', 'case ', 'try {', 'catch', 'finally',
-        'for (', 'while (', 'do {',
-        'stream()', 'map(', 'filter(', 'collect(',
-        '@DataProvider', '@Factory', 'DataProvider'
-    ]
-    
-    for indicator in complexity_indicators:
-        if indicator in java_code:
-            complexity_score += 1
-    
-    # If too complex, fall back to LLM
-    if complexity_score > 2 or len(java_code) > 500:
+    try:
+        result = java_code
+        complexity_score = 0
+        
+        # Check complexity indicators
+        complexity_indicators = [
+            'class ', 'extends ', 'implements ', 'interface ',
+            'switch', 'case ', 'try {', 'catch', 'finally',
+            'for (', 'while (', 'do {',
+            'stream()', 'map(', 'filter(', 'collect(',
+            '@DataProvider', '@Factory', 'DataProvider'
+        ]
+        
+        for indicator in complexity_indicators:
+            if indicator in java_code:
+                complexity_score += 1
+        
+        # If too complex, fall back to LLM
+        if complexity_score > 2 or len(java_code) > 500:
+            return None
+        
+        # Apply direct conversions
+        conversions = get_direct_conversions()
+        for pattern, replacement, flags in conversions:
+            result = re.sub(pattern, replacement, result, flags=flags)
+        
+        # Convert @Test annotations
+        result = re.sub(
+            r'@Test[^\n]*\n\s*(public\s+)?void\s+(\w+)\s*\(',
+            r"test('\2', async ({ page }) => {",
+            result
+        )
+        
+        # Add async/await (simple approach)
+        lines = result.split('\n')
+        new_lines = []
+        for line in lines:
+            stripped = line.strip()
+            # Skip comments, imports, empty lines, and lines that already have await
+            if (stripped and 
+                not stripped.startswith('//') and 
+                not stripped.startswith('/*') and 
+                not stripped.startswith('*') and 
+                not stripped.startswith('import') and
+                not stripped.startswith('const') and
+                not stripped.startswith('let') and
+                not stripped.startswith('var') and
+                not stripped.startswith('await') and
+                not stripped.startswith('test(') and
+                not stripped.startswith('});')):
+                # Check if line starts with method call or variable
+                if re.match(r'^\s*(driver|page|element|\w+)\.', stripped):
+                    line = re.sub(r'^(\s+)(\w+)', r'\1await \2', line)
+            new_lines.append(line)
+        result = '\n'.join(new_lines)
+        
+        # Clean up Java syntax
+        result = re.sub(r'\);\s*$', '});', result, flags=re.MULTILINE)
+        result = re.sub(r'public\s+', '', result)
+        result = re.sub(r'private\s+', '', result)
+        result = re.sub(r'protected\s+', '', result)
+        result = re.sub(r'String\s+(\w+)', r'const \1', result)
+        result = re.sub(r'WebElement\s+(\w+)', r'const \1', result)
+        
+        # Add Playwright imports
+        is_ts = language.lower() == "typescript"
+        if is_ts:
+            imports = "import { test, expect } from '@playwright/test';\n\n"
+        else:
+            imports = "const { test, expect } = require('@playwright/test');\n\n"
+        
+        result = imports + result
+        
+        # Basic validation - check if result looks reasonable
+        if len(result) < 50 or 'page.' not in result:
+            return None
+            
+        return result
+        
+    except Exception as e:
+        print(f"Fast conversion error: {e}")
         return None
-    
-    # Apply direct conversions
-    for pattern, replacement, *flags in DIRECT_CONVERSIONS:
-        flag = flags[0] if flags else 0
-        result = re.sub(pattern, replacement, result, flags=flag)
-    
-    # Convert @Test annotations
-    result = re.sub(
-        r'@Test[^\n]*\n\s*(public\s+)?void\s+(\w+)\s*\(',
-        r"test('\2', async ({ page }) => {",
-        result
-    )
-    
-    # Add async/await
-    result = re.sub(r'^(\s+)(?!await|//|/\*|\*|import|const|let|var)(\w+)', r'\1await \2', result, flags=re.MULTILINE)
-    
-    # Clean up Java syntax
-    result = re.sub(r'\);\s*$', '});', result, flags=re.MULTILINE)
-    result = re.sub(r'{\s*$', '{', result, flags=re.MULTILINE)
-    result = re.sub(r'public\s+', '', result)
-    result = re.sub(r'private\s+', '', result)
-    result = re.sub(r'protected\s+', '', result)
-    result = re.sub(r'String\s+(\w+)', r'const \1', result)
-    result = re.sub(r'WebElement\s+(\w+)', r'const \1', result)
-    
-    # Add Playwright imports
-    is_ts = language.lower() == "typescript"
-    imports = "import { test, expect } from '@playwright/test';\n\n" if not is_ts else \
-              "import { test, expect, Page } from '@playwright/test';\n\n"
-    
-    result = imports + result
-    
-    return result
 
 
 # =============================================================================
@@ -148,7 +179,7 @@ class FastOllamaClient:
                 ttl_dns_cache=300,
                 use_dns_cache=True,
             )
-            timeout = aiohttp.ClientTimeout(total=30, connect=5)
+            timeout = aiohttp.ClientTimeout(total=60, connect=5)
             self._session = aiohttp.ClientSession(
                 connector=connector,
                 timeout=timeout,
@@ -245,18 +276,34 @@ class FastConverter:
         """Build the shortest possible effective prompt."""
         lang_cap = "TypeScript" if lang == "typescript" else "JavaScript"
         
-        return f"""Convert to Playwright {lang_cap}:
+        return f"""Convert this Selenium Java test to Playwright {lang_cap}:
 
-Input:
+```java
 {code}
+```
 
-Output:"""
+Rules:
+1. Use async/await
+2. Use page.locator() for elements
+3. Use test() from @playwright/test
+4. Return only the code, no explanations
+
+Playwright {lang_cap} output:"""
     
     async def convert(self, java_code: str, language: str = "typescript") -> Dict[str, Any]:
         """
         Convert with multiple speed optimizations.
         """
         start = time.time()
+        
+        # Clean input
+        java_code = java_code.strip()
+        if not java_code:
+            return {
+                "status": "error",
+                "message": "Empty code provided",
+                "time": 0
+            }
         
         # 1. Check cache
         cache_key = self._get_cache_key(java_code, language)
@@ -287,19 +334,27 @@ Output:"""
         try:
             raw_output = await self.client.generate(
                 prompt, 
-                max_tokens=1024,
+                max_tokens=2048,
                 temperature=0.1
             )
             
-            # Extract code
-            code_match = re.search(r'```(?:typescript|javascript)?\s*(.*?)```', raw_output, re.DOTALL)
-            if code_match:
-                result = code_match.group(1).strip()
-            else:
-                result = raw_output.strip()
+            # Extract code - try multiple patterns
+            result = raw_output.strip()
+            
+            # Try to extract code blocks
+            patterns = [
+                r'```(?:typescript|javascript|ts|js)?\s*\n?(.*?)\n?```',
+                r'```\s*\n?(.*?)\n?```',
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, raw_output, re.DOTALL | re.IGNORECASE)
+                if match:
+                    result = match.group(1).strip()
+                    break
             
             # Add imports if missing
-            if 'import' not in result:
+            if 'import' not in result and 'require' not in result:
                 if language == "typescript":
                     result = "import { test, expect } from '@playwright/test';\n\n" + result
                 else:
