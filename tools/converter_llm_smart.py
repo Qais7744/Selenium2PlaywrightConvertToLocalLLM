@@ -12,89 +12,118 @@ from typing import Dict, Any
 
 
 def create_conversion_prompt(java_code: str, language: str) -> str:
-    """Create expert prompt for LLM conversion."""
-    lang = "TypeScript" if language == "typescript" else "JavaScript"
+    """Create expert prompt for LLM conversion with language-specific instructions."""
     
-    return f"""You are an expert Test Automation Engineer specializing in converting Selenium Java code to Playwright {lang}.
-
-## CONVERSION RULES - FOLLOW STRICTLY:
-
-### 1. IMPORTS
-- ALWAYS use: `import {{ test, expect }} from '@playwright/test'`
-- NEVER use: `import {{ chromium }} from 'playwright'` or browser launching
-
-### 2. TEST STRUCTURE
-- Wrap all tests in: `test.describe('Suite Name', () => {{ ... }})`
-- Convert methods to: `test('method name', async ({{ page }}) => {{ ... }})`
-- Convert @BeforeClass to: `test.beforeAll(async ({{ page }}) => {{ ... }})`
-- Convert @AfterClass to: `test.afterAll(async ({{ page }}) => {{ ... }})`
-
-### 3. BROWSER HANDLING
-- NEVER manually launch browser (no `chromium.launch()`)
-- NEVER create `browser.newPage()`
-- ALWAYS use the `{{ page }}` fixture provided by Playwright Test
-
-### 4. SELENIUM TO PLAYWRIGHT MAPPING
-| Selenium Java | Playwright {lang} |
-|--------------|-------------------|
-| `driver.get(url)` | `await page.goto(url)` |
-| `driver.findElement(By.id("x"))` | `page.locator("#x")` |
-| `driver.findElement(By.cssSelector("x"))` | `page.locator("x")` |
-| `driver.findElement(By.className("x"))` | `page.locator(".x")` |
-| `driver.findElement(By.xpath("x"))` | `page.locator("xpath=x")` |
-| `element.sendKeys("text")` | `await element.fill("text")` |
-| `element.click()` | `await element.click()` |
-| `element.getText()` | `await element.innerText()` |
-| `driver.getTitle()` | `await page.title()` |
-| `driver.getCurrentUrl()` | `await page.url()` |
-| `Thread.sleep(ms)` | `await page.waitForTimeout(ms)` |
-| `System.out.println(x)` | `console.log(x)` |
-| `Assert.assertEquals(a,b)` | `expect(a).toBe(b)` |
-| `Assert.assertTrue(x)` | `expect(x).toBeTruthy()` |
-
-### 5. REMOVE ALL JAVA CODE
-- Remove: `System.setProperty`, `WebDriver`, `ChromeDriver`
-- Remove: `public`, `private`, `static`, `void` keywords
-- Remove: `By.id`, `By.cssSelector` - use string selectors directly
-- Remove: semicolons at end of lines (TypeScript style)
-
-### 6. ERROR HANDLING
-- Convert `catch (Exception e)` to `catch (e)`
-- Convert `e.printStackTrace()` to `console.error(e)`
-
-## EXAMPLE CONVERSION:
-
-**Input Java:**
-```java
-@Test
-public void loginTest() {{
-    driver.get("https://example.com");
-    driver.findElement(By.id("user")).sendKeys("admin");
-    Assert.assertEquals(driver.getTitle(), "Home");
-}}
-```
-
-**Output Playwright {lang}:**
-```typescript
-import {{ test, expect }} from '@playwright/test';
-
-test.describe('TestSuite', () => {{
-    test('loginTest', async ({{ page }}) => {{
-        await page.goto("https://example.com")
-        await page.locator("#user").fill("admin")
-        expect(await page.title()).toBe("Home")
-    }});
-}});
-```
-
-## NOW CONVERT THIS CODE:
-
-```java
-{java_code}
-```
-
-## OUTPUT (Playwright {lang} ONLY - no explanations):
-"""
+    # Language-specific configuration
+    if language == "typescript":
+        lang_name = "TypeScript"
+        import_syntax = "import { test, expect } from '@playwright/test';"
+        use_types = "You may use TypeScript type annotations (e.g., `const title: string = ...`) where appropriate."
+        file_ext = ".spec.ts"
+        module_system = "ES6 modules (import/export)"
+    else:  # javascript
+        lang_name = "JavaScript"
+        import_syntax = "const { test, expect } = require('@playwright/test');"
+        use_types = "DO NOT use TypeScript type annotations. Use plain JavaScript."
+        file_ext = ".spec.js"
+        module_system = "CommonJS (require/module.exports)"
+    
+    # Build prompt with proper escaping
+    prompt_parts = [
+        f"You are an expert Test Automation Engineer specializing in converting Selenium Java code to Playwright {lang_name}.",
+        "",
+        f"## TARGET LANGUAGE: {lang_name}",
+        f"File extension: {file_ext}",
+        f"Module system: {module_system}",
+        "",
+        "## CRITICAL RULES - FOLLOW STRICTLY:",
+        "",
+        "### 1. IMPORTS (MUST USE THIS EXACT SYNTAX)",
+        f"For {lang_name}, use:",
+        "```",
+        import_syntax,
+        "```",
+        "- NEVER use: `import { chromium } from 'playwright'` or browser launching",
+        "- NEVER mix import styles",
+        "",
+        "### 2. LANGUAGE SPECIFIC RULES",
+        use_types,
+        f"- Use {module_system} consistently throughout the file",
+        f"- Ensure syntax is valid {lang_name}",
+        "",
+        "### 3. TEST STRUCTURE",
+        "- Wrap all tests in: `test.describe('Suite Name', () => { ... })`",
+        "- Convert methods to: `test('method name', async ({ page }) => { ... })`",
+        "- Convert @BeforeClass to: `test.beforeAll(async ({ page }) => { ... })`",
+        "- Convert @AfterClass to: `test.afterAll(async ({ page }) => { ... })`",
+        "",
+        "### 4. BROWSER HANDLING",
+        "- NEVER manually launch browser (no `chromium.launch()`)",
+        "- NEVER create `browser.newPage()`",
+        "- ALWAYS use the `{ page }` fixture provided by Playwright Test",
+        "",
+        "### 5. SELENIUM TO PLAYWRIGHT MAPPING",
+        "| Selenium Java | Playwright |",
+        "|--------------|-------------------|",
+        "| `driver.get(url)` | `await page.goto(url)` |",
+        "| `driver.findElement(By.id(\"x\"))` | `page.locator(\"#x\")` |",
+        "| `driver.findElement(By.cssSelector(\"x\"))` | `page.locator(\"x\")` |",
+        "| `driver.findElement(By.className(\"x\"))` | `page.locator(\".x\")` |",
+        "| `driver.findElement(By.xpath(\"x\"))` | `page.locator(\"xpath=x\")` |",
+        "| `element.sendKeys(\"text\")` | `await element.fill(\"text\")` |",
+        "| `element.click()` | `await element.click()` |",
+        "| `element.getText()` | `await element.innerText()` |",
+        "| `driver.getTitle()` | `await page.title()` |",
+        "| `driver.getCurrentUrl()` | `await page.url()` |",
+        "| `Thread.sleep(ms)` | `await page.waitForTimeout(ms)` |",
+        "| `System.out.println(x)` | `console.log(x)` |",
+        "| `Assert.assertEquals(a,b)` | `expect(a).toBe(b)` |",
+        "| `Assert.assertTrue(x)` | `expect(x).toBeTruthy()` |",
+        "",
+        "### 6. REMOVE ALL JAVA CODE",
+        "- Remove: `System.setProperty`, `WebDriver`, `ChromeDriver`",
+        "- Remove: `public`, `private`, `static`, `void` keywords",
+        "- Remove: `By.id`, `By.cssSelector` - use string selectors directly",
+        "",
+        "### 7. ERROR HANDLING",
+        "- Convert `catch (Exception e)` to `catch (e)`",
+        "- Convert `e.printStackTrace()` to `console.error(e)`",
+        "",
+        f"## EXAMPLE CONVERSION FOR {lang_name}:",
+        "",
+        "**Input Java:**",
+        "```java",
+        "@Test",
+        "public void loginTest() {",
+        '    driver.get("https://example.com");',
+        '    driver.findElement(By.id("user")).sendKeys("admin");',
+        '    Assert.assertEquals(driver.getTitle(), "Home");',
+        "}",
+        "```",
+        "",
+        f"**Output Playwright {lang_name}:**",
+        f"```{language}",
+        import_syntax,
+        "",
+        "test.describe('TestSuite', () => {",
+        "    test('loginTest', async ({ page }) => {",
+        '        await page.goto("https://example.com")',
+        '        await page.locator("#user").fill("admin")',
+        '        expect(await page.title()).toBe("Home")',
+        "    });",
+        "});",
+        "```",
+        "",
+        f"## NOW CONVERT THIS CODE TO {lang_name}:",
+        "",
+        "```java",
+        java_code,
+        "```",
+        "",
+        f"## OUTPUT (Playwright {lang_name} ONLY - no explanations):",
+    ]
+    
+    return "\n".join(prompt_parts)
 
 
 def call_llm(prompt: str, model: str = "qwen2.5-coder:0.5b", timeout: int = 300) -> str:
@@ -123,31 +152,41 @@ def call_llm(prompt: str, model: str = "qwen2.5-coder:0.5b", timeout: int = 300)
 def extract_code_block(text: str) -> str:
     """Extract code from LLM response."""
     # Try to find code block
-    patterns = [
-        r'```(?:typescript|javascript|ts|js)?\s*\n?(.*?)\n?```',
-        r'```\s*\n?(.*?)\n?```',
-    ]
+    # Pattern for TypeScript/JavaScript code blocks
+    match = re.search(r'```(?:typescript|javascript|ts|js)?\s*\n?(.*?)\n?```', text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
     
-    for pattern in patterns:
-        match = re.search(pattern, text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
+    # Generic code block
+    match = re.search(r'```\s*\n?(.*?)\n?```', text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
     
     # If no code block, return as-is (might be plain code)
     return text.strip()
 
 
-def validate_and_fix(code: str) -> str:
-    """Validate output and fix common issues."""
+def validate_and_fix(code: str, language: str) -> str:
+    """Validate output and fix common issues based on target language."""
     
-    # Must have Playwright import
-    if 'from \'@playwright/test\'' not in code and 'from "@playwright/test"' not in code:
-        code = "import { test, expect } from '@playwright/test';\n\n" + code
+    # Language-specific import check and fix
+    if language == "typescript":
+        # TypeScript: ES6 import
+        if 'from \'@playwright/test\'' not in code and 'from "@playwright/test"' not in code:
+            code = "import { test, expect } from '@playwright/test';\n\n" + code
+        # Remove CommonJS require if present
+        code = re.sub(r"const\s*\{\s*test\s*,\s*expect\s*\}\s*=\s*require\s*\(\s*['\"]@playwright/test['\"]\s*\)\s*;?\n?", '', code)
+    else:
+        # JavaScript: CommonJS require
+        if 'require(\'@playwright/test\')' not in code and 'require("@playwright/test")' not in code:
+            code = "const { test, expect } = require('@playwright/test');\n\n" + code
+        # Remove ES6 import if present
+        code = re.sub(r"import\s*\{\s*test\s*,\s*expect\s*\}\s*from\s*['\"]@playwright/test['\"]\s*;?\n?", '', code)
     
-    # Remove chromium imports if present
+    # Remove chromium imports if present (applies to both)
     code = re.sub(r"import\s*\{\s*chromium\s*\}\s*from\s*['\"]playwright['\"];?\n?", '', code)
     
-    # Remove manual browser launching
+    # Remove manual browser launching (applies to both)
     code = re.sub(r'const\s+\w+\s*=\s*await\s+chromium\.launch[^;]*;?', '', code)
     code = re.sub(r'const\s+\w+\s*=\s*await\s+browser\.newPage[^;]*;?', '', code)
     code = re.sub(r'await\s+browser\.close\s*\(\s*\);?', '', code)
@@ -177,7 +216,7 @@ def convert_with_llm(java_code: str, language: str = "typescript") -> Dict[str, 
     if not java_code or not java_code.strip():
         return {"status": "error", "message": "Empty code"}
     
-    # Create prompt
+    # Create language-specific prompt
     prompt = create_conversion_prompt(java_code, language)
     
     try:
@@ -187,8 +226,8 @@ def convert_with_llm(java_code: str, language: str = "typescript") -> Dict[str, 
         # Extract code
         code = extract_code_block(llm_response)
         
-        # Validate and fix
-        code = validate_and_fix(code)
+        # Validate and fix with language context
+        code = validate_and_fix(code, language)
         
         # Final validation
         errors = []
@@ -207,7 +246,8 @@ def convert_with_llm(java_code: str, language: str = "typescript") -> Dict[str, 
         
         return {
             "status": "success",
-            "converted_code": code
+            "converted_code": code,
+            "language": language
         }
         
     except Exception as e:
@@ -231,18 +271,14 @@ public class Test {
     }
 }'''
     
-    print("Converting...")
-    result = convert_with_llm(test, "typescript")
+    print("="*60)
+    print("TESTING TYPESCRIPT CONVERSION:")
+    print("="*60)
+    result_ts = convert_with_llm(test, "typescript")
+    print(result_ts.get('converted_code', 'Error'))
     
-    if result['status'] == 'success':
-        print("\n✅ SUCCESS:")
-        print(result['converted_code'])
-    else:
-        print(f"\n❌ {result['status'].upper()}:")
-        if 'converted_code' in result:
-            print(result['converted_code'])
-        if 'errors' in result:
-            for e in result['errors']:
-                print(f"  - {e}")
-        if 'message' in result:
-            print(f"  Message: {result['message']}")
+    print("\n" + "="*60)
+    print("TESTING JAVASCRIPT CONVERSION:")
+    print("="*60)
+    result_js = convert_with_llm(test, "javascript")
+    print(result_js.get('converted_code', 'Error'))
