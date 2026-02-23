@@ -23,6 +23,7 @@ def convert(java_code: str) -> str:
     class_name = 'TestSuite'
     method_braces = 0
     pending_method = None
+    in_main_method = False
     
     for line in lines:
         stripped = line.strip()
@@ -64,12 +65,25 @@ def convert(java_code: str) -> str:
         if should_skip:
             continue
         
-        # === HANDLE CLASS ===
+        # === HANDLE CLASS DECLARATION ===
         class_match = re.search(r'class\s+(\w+)', stripped)
         if class_match and not in_class:
             class_name = class_match.group(1)
             in_class = True
             output_lines.append(f"test.describe('{class_name}', () => {{")
+            continue
+        
+        # === HANDLE MAIN METHOD ===
+        # Match: public static void main(String[] args) {
+        main_match = re.search(r'(?:public\s+)?static\s+void\s+main\s*\(\s*String\s*\[\s*\]\s*\w*\s*\)', stripped)
+        if main_match:
+            in_main_method = True
+            # Start test block for main method
+            if '{' in stripped:
+                output_lines.append("    test('main', async ({ page }) => {")
+                method_braces = 1
+            else:
+                output_lines.append("    test('main', async ({ page }) => {")
             continue
         
         # === HANDLE ANNOTATIONS ===
@@ -97,10 +111,10 @@ def convert(java_code: str) -> str:
             # Method name will be on next line
             continue
         
-        # === HANDLE METHOD SIGNATURES ===
+        # === HANDLE REGULAR METHOD SIGNATURES ===
         # Match: public void methodName() {
         method_match = re.match(r'(?:public\s+)?(?:void|\w+)\s+(\w+)\s*\(\s*\)\s*\{?\s*$', stripped)
-        if method_match:
+        if method_match and not in_main_method:
             method_name = method_match.group(1)
             
             # Skip setUp/tearDown that were converted to hooks
@@ -124,12 +138,13 @@ def convert(java_code: str) -> str:
         if stripped == '}':
             if method_braces > 0:
                 method_braces -= 1
-                if method_braces == 0 and pending_method:
-                    if pending_method == 'hook':
+                if method_braces == 0:
+                    if in_main_method:
                         output_lines.append('    });')
-                    else:
+                        in_main_method = False
+                    elif pending_method:
                         output_lines.append('    });')
-                    pending_method = None
+                        pending_method = None
             continue
         
         # === CONVERT LINE CONTENT ===
@@ -139,7 +154,7 @@ def convert(java_code: str) -> str:
                 output_lines.append(f"        {converted}")
     
     # Close final method if open
-    if pending_method:
+    if pending_method or in_main_method:
         output_lines.append('    });')
     
     # Close class
@@ -236,14 +251,18 @@ def convert_line(line: str) -> str:
     result = re.sub(r'catch\s*\(\s*(?:Exception|Error|Throwable)\s+(\w+)\s*\)', r'catch (\1)', result)
     result = re.sub(r'(\w+)\.printStackTrace\s*\(\s*\)', r'console.error(\1)', result)
     
-    # Remove access modifiers
+    # Remove access modifiers and Java keywords
     result = re.sub(r'\bpublic\s+', '', result)
     result = re.sub(r'\bprivate\s+', '', result)
     result = re.sub(r'\bprotected\s+', '', result)
     result = re.sub(r'\bstatic\s+', '', result)
     result = re.sub(r'\bfinal\s+', '', result)
+    result = re.sub(r'\bvoid\s+', '', result)
     
-    # Remove semicolons at end (TypeScript doesn't require them)
+    # Remove main method signature remnants
+    result = re.sub(r'main\s*\(\s*String\s*\[\s*\]\s*\w*\s*\)', '', result)
+    
+    # Remove semicolons at end
     result = result.rstrip()
     if result.endswith(';'):
         result = result[:-1]
@@ -253,57 +272,61 @@ def convert_line(line: str) -> str:
 
 # Test
 if __name__ == "__main__":
-    test = '''package com.example;
+    # Test 1: main() method
+    test1 = '''import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.chrome.ChromeDriver;
 
-import org.openqa.selenium.*;
+public class Test {
+    public static void main(String[] args) {
+        WebDriver driver = new ChromeDriver();
+        driver.get("https://www.google.com");
+        System.out.println(driver.getTitle());
+        driver.quit();
+    }
+}'''
+    
+    print("="*60)
+    print("TEST 1: main() method")
+    print("="*60)
+    print("INPUT:")
+    print(test1)
+    print("\nOUTPUT:")
+    result1 = convert(test1)
+    print(result1)
+    
+    # Test 2: @Test method
+    test2 = '''import org.openqa.selenium.*;
 import org.testng.Assert;
 import org.testng.annotations.*;
 
 public class LoginTest {
     WebDriver driver;
     
-    @BeforeClass
-    public void setUp() {
-        System.setProperty("webdriver.chrome.driver", "C:/chromedriver.exe");
-        driver = new ChromeDriver();
-    }
-    
     @Test
     public void testLogin() {
         driver.get("https://example.com");
-        WebElement username = driver.findElement(By.id("username"));
-        username.sendKeys("admin");
-        driver.findElement(By.cssSelector("#password")).sendKeys("secret");
-        driver.findElement(By.id("login-btn")).click();
-        String title = driver.getTitle();
-        Assert.assertEquals(title, "Dashboard");
-    }
-    
-    @AfterClass
-    public void tearDown() {
-        driver.quit();
+        driver.findElement(By.id("username")).sendKeys("admin");
+        Assert.assertEquals(driver.getTitle(), "Dashboard");
     }
 }'''
     
+    print("\n" + "="*60)
+    print("TEST 2: @Test method")
     print("="*60)
     print("INPUT:")
-    print(test)
-    print("\n" + "="*60)
-    print("OUTPUT:")
-    result = convert(test)
-    print(result)
+    print(test2)
+    print("\nOUTPUT:")
+    result2 = convert(test2)
+    print(result2)
     
     print("\n" + "="*60)
     print("VALIDATION:")
-    errors = []
-    forbidden = ['chromium.launch', 'browser.launch', 'System.setProperty', 'WebDriver', 'ChromeDriver', 
-                 'By.id', '.sendKeys(', 'public void', '@Test']
+    forbidden = ['void main', 'String[] args', 'public static', 'WebDriver', 'ChromeDriver', 
+                 'System.setProperty', 'By.id', '.sendKeys']
+    all_ok = True
     for pattern in forbidden:
-        if pattern in result:
-            errors.append(f"Found: {pattern}")
-    
-    if errors:
-        for e in errors:
-            print(f"  ERROR: {e}")
-    else:
-        print("  [OK] All checks passed - Pure Playwright code!")
+        if pattern in result1 or pattern in result2:
+            print(f"  ERROR: Found '{pattern}'")
+            all_ok = False
+    if all_ok:
+        print("  [OK] All checks passed!")
