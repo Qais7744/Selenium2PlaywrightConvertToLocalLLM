@@ -97,7 +97,7 @@ test.describe('TestSuite', () => {{
 """
 
 
-def call_llm(prompt: str, model: str = "qwen2.5-coder:0.5b", timeout: int = 120) -> str:
+def call_llm(prompt: str, model: str = "qwen2.5-coder:0.5b", timeout: int = 300) -> str:
     """Call Ollama LLM for conversion."""
     try:
         response = requests.post(
@@ -108,10 +108,10 @@ def call_llm(prompt: str, model: str = "qwen2.5-coder:0.5b", timeout: int = 120)
                 "stream": False,
                 "options": {
                     "temperature": 0.1,  # Low for consistent output
-                    "num_predict": 4000,  # Allow long responses
+                    "num_predict": 2000,  # Shorter for faster response
                 }
             },
-            timeout=timeout
+            timeout=timeout  # 5 minutes max
         )
         response.raise_for_status()
         data = response.json()
