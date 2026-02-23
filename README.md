@@ -1,53 +1,26 @@
-<div align="center">
-
-![Selenium2Playwright Banner](assets/banner.svg)
-
 # 🚀 Selenium2Playwright Converter
 
-**Convert Selenium Python Tests to Playwright using Local LLM**
+**Convert Selenium Java Tests to Playwright TypeScript using Local LLM**
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Playwright](https://img.shields.io/badge/Playwright-1.40%2B-orange.svg)](https://playwright.dev/python/)
-[![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-43B02A.svg)](https://www.selenium.dev/)
 
-**[Features](#features)** • **[Installation](#installation)** • **[Usage](#usage)** • **[Examples](#examples)** • **[Configuration](#configuration)**
+An intelligent code converter that transforms Selenium Java test scripts into Playwright TypeScript code using **Local LLM** (Ollama). No API keys needed!
 
-</div>
+![Converter Interface](assets/banner.png)
 
 ---
 
 ## 📋 Table of Contents
 
-- [Overview](#-overview)
-- [Features](#-features)
-- [Architecture](#-architecture)
-- [Installation](#-installation)
-- [Quick Start](#-quick-start)
-- [Usage](#-usage)
-- [Supported LLM Providers](#-supported-llm-providers)
-- [Examples](#-examples)
-- [Configuration](#-configuration)
-- [Screenshots](#-screenshots)
-- [Troubleshooting](#-troubleshooting)
-- [Contributing](#-contributing)
-- [License](#-license)
-
----
-
-## 🌟 Overview
-
-Selenium2Playwright is an intelligent code converter that transforms Selenium Python test scripts into Playwright Python code. It uses **Local LLMs** (Large Language Models) to understand complex code patterns and perform accurate conversions while preserving your test logic.
-
-### Why Convert to Playwright?
-
-| Feature | Selenium | Playwright |
-|---------|----------|------------|
-| Auto-wait | ❌ Manual | ✅ Built-in |
-| Speed | 🐢 Slower | 🚀 Faster |
-| Modern Web | ⚠️ Limited | ✅ Excellent |
-| Debugging | Basic | Advanced |
-| Browser Support | Good | Excellent |
+- [Features](#features)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
 
 ---
 
@@ -55,59 +28,54 @@ Selenium2Playwright is an intelligent code converter that transforms Selenium Py
 
 ### 🔥 Core Features
 
-- **🤖 Local LLM Integration** - Uses Ollama, LM Studio, or Hugging Face models (no API keys needed!)
-- **🔄 Batch Conversion** - Convert entire test directories in one command
-- **📝 Smart Pattern Matching** - Regex + LLM for accurate conversions
-- **⚡ Fast Processing** - Parallel conversion for multiple files
-- **🎯 Preserves Logic** - Maintains test structure and assertions
-- **🔍 Code Analysis** - Analyze complexity before conversion
+- 🤖 **Local LLM Integration** - Uses Ollama (CodeLlama/qwen2.5-coder) - no API keys needed!
+- 🔄 **Smart Conversion** - Expert LLM prompting for accurate conversions
+- 📝 **Framework Support** - Handles TestNG annotations (@Test, @BeforeClass, etc.)
+- ⚡ **Fast Fallback** - Pattern matching fallback when LLM is slow
+- 🎯 **Zero Java Code** - Guaranteed Playwright output, no Java remnants
 
 ### 🛡️ Supported Conversions
 
-| Selenium Pattern | Playwright Equivalent |
-|------------------|----------------------|
-| `driver.get()` | `page.goto()` |
-| `find_element(By.ID)` | `locator("#id")` |
-| `find_element(By.CSS_SELECTOR)` | `locator("selector")` |
-| `find_element(By.XPATH)` | `locator("xpath=...")` |
-| `element.click()` | `element.click()` |
-| `element.send_keys()` | `element.fill()` |
-| `WebDriverWait` | `page.wait_for_selector()` |
-| `time.sleep()` | `page.wait_for_timeout()` |
-| `element.text` | `element.inner_text()` |
-| `is_displayed()` | `is_visible()` |
+| Selenium Java | Playwright TypeScript |
+|---------------|----------------------|
+| `driver.get()` | `await page.goto()` |
+| `findElement(By.id)` | `page.locator("#id")` |
+| `findElement(By.cssSelector)` | `page.locator("selector")` |
+| `.sendKeys()` | `.fill()` |
+| `.click()` | `.click()` |
+| `.getText()` | `.innerText()` |
+| `driver.getTitle()` | `await page.title()` |
+| `@Test` | `test()` |
+| `@BeforeClass` | `test.beforeAll()` |
+| `Assert.assertEquals` | `expect().toBe()` |
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Selenium2Playwright                       │
-│                      Converter                               │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │   Selenium   │───▶│  Code Parser │───▶│   Converter  │  │
-│  │   Input File │    │   (AST/Regex)│    │   Engine     │  │
-│  └──────────────┘    └──────────────┘    └──────┬───────┘  │
-│                                                  │          │
-│                         ┌───────────────────────┘          │
-│                         ▼                                  │
-│              ┌─────────────────────┐                       │
-│              │   Local LLM Client  │                       │
-│              │  ┌───────────────┐  │                       │
-│              │  │   Ollama      │  │                       │
-│              │  │   LM Studio   │  │                       │
-│              │  │  HuggingFace  │  │                       │
-│              │  └───────────────┘  │                       │
-│              └──────────┬──────────┘                       │
-│                         ▼                                  │
-│              ┌─────────────────────┐                       │
-│              │  Playwright Output  │                       │
-│              └─────────────────────┘                       │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────┐
+│           User Interface                │
+│      (Flask Web App - Port 5000)        │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│       app_llm_smart.py                  │
+│  - Flask routes                         │
+│  - Request handling                     │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│    converter_llm_smart.py               │
+│  - Expert LLM prompting                 │
+│  - Pattern fallback                     │
+│  - Output validation                    │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│         Ollama (Local LLM)              │
+│    - qwen2.5-coder:0.5b or similar      │
+└─────────────────────────────────────────┘
 ```
 
 ---
@@ -117,7 +85,7 @@ Selenium2Playwright is an intelligent code converter that transforms Selenium Py
 ### Prerequisites
 
 - Python 3.8 or higher
-- One of the LLM providers installed (Ollama recommended)
+- Ollama installed locally
 
 ### Step 1: Clone the Repository
 
@@ -132,357 +100,134 @@ cd Selenium2PlaywrightConvertToLocalLLM
 # Create virtual environment
 python -m venv venv
 
-# Activate virtual environment
-# On Windows:
+# Activate (Windows)
 venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-### Step 3: Install Ollama (Recommended)
+### Step 3: Install Ollama & Model
 
 ```bash
-# macOS/Linux
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Windows - Download from https://ollama.com/download
+# Download from https://ollama.com (Windows/Mac/Linux)
 
 # Pull a code model
-ollama pull codellama
+ollama pull qwen2.5-coder:0.5b
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Usage
 
-### 1️⃣ Convert a Single File
+### Start the Application
 
+You need **TWO** terminal windows:
+
+**Terminal 1 - Start Ollama:**
 ```bash
-python -m src examples/selenium_sample.py -o output/
+ollama serve
 ```
 
-### 2️⃣ Convert Entire Directory
-
+**Terminal 2 - Start Flask App:**
 ```bash
-python -m src tests/selenium/ -o tests/playwright/
+cd tools
+python app_llm_smart.py
 ```
 
-### 3️⃣ Analyze Before Converting
+### Open Browser
 
-```bash
-python -m src your_test.py --analyze
-```
+Navigate to: **http://localhost:5000**
+
+### Convert Code
+
+1. Paste your Java Selenium code in the input area
+2. Select TypeScript or JavaScript
+3. Click **Convert**
+4. Copy or save the converted Playwright code
 
 ---
 
-## 📖 Usage
+## 📁 Project Structure
 
-### Command Line Interface
-
-```bash
-python -m src [OPTIONS] INPUT
 ```
-
-### Options
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-o, --output` | Output file or directory | Auto-generated |
-| `--llm` | LLM provider (ollama/lmstudio/huggingface) | ollama |
-| `--model` | Model name | codellama |
-| `--api-base` | Custom API base URL | None |
-| `--no-llm` | Skip LLM enhancement | False |
-| `--analyze` | Analyze code complexity | False |
-| `--pattern` | File pattern for directories | *.py |
-| `-v, --verbose` | Enable verbose output | False |
-
-### Examples
-
-```bash
-# Use Ollama with codellama
-python -m src input.py --llm ollama --model codellama
-
-# Use LM Studio
-python -m src input.py --llm lmstudio --api-base http://localhost:1234
-
-# Batch convert with pattern
-python -m src tests/ --pattern "test_*.py" -o converted/
-
-# No LLM (regex only)
-python -m src input.py --no-llm
-```
-
-### Python API
-
-```python
-from src import SeleniumToPlaywrightConverter
-
-# Initialize converter
-converter = SeleniumToPlaywrightConverter(
-    llm_provider="ollama",
-    model_name="codellama"
-)
-
-# Convert a file
-converter.convert_file("selenium_test.py", "playwright_test.py")
-
-# Convert directory
-converter.convert_directory(
-    "tests/selenium/",
-    "tests/playwright/"
-)
-
-# Convert code string
-selenium_code = """
-from selenium import webdriver
-driver = webdriver.Chrome()
-driver.get("https://example.com")
-"""
-
-playwright_code = converter.convert_code(selenium_code)
-print(playwright_code)
-```
-
----
-
-## 🤖 Supported LLM Providers
-
-### Ollama (Recommended ⭐)
-
-Free, local LLM runner. Perfect for code generation.
-
-```bash
-# Install: https://ollama.com
-ollama pull codellama
-
-# Usage
-python -m src input.py --llm ollama --model codellama
-```
-
-**Recommended Models:**
-- `codellama` - Code-optimized Llama model
-- `codellama:13b` - Larger variant for complex code
-- `mistral` - Fast and efficient
-- `mixtral` - Mixture of experts model
-
-### LM Studio
-
-GUI for running local LLMs with OpenAI-compatible API.
-
-```bash
-# Download: https://lmstudio.ai
-# Start local server in LM Studio
-
-# Usage
-python -m src input.py --llm lmstudio --api-base http://localhost:1234
-```
-
-### Hugging Face Transformers
-
-Use Hugging Face models directly (requires more setup).
-
-```bash
-# Usage
-python -m src input.py --llm huggingface --model microsoft/CodeGPT-small-py
-```
-
----
-
-## 📸 Screenshots
-
-### Banner & Logo
-![Banner](assets/banner.png)
-
-### CLI Demo
-![CLI Demo](assets/cli-demo.png)
-
-### Conversion Example
-
-**Before (Selenium):**
-```python
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-
-driver = webdriver.Chrome()
-driver.get("https://example.com/login")
-
-# Find and fill form
-username = driver.find_element(By.ID, "username")
-username.send_keys("testuser")
-
-password = driver.find_element(By.ID, "password")
-password.send_keys("password123")
-
-# Submit
-driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
-
-# Wait for redirect
-WebDriverWait(driver, 10).until(
-    EC.presence_of_element_located((By.CLASS_NAME, "dashboard"))
-)
-
-print(f"Current URL: {driver.current_url}")
-driver.quit()
-```
-
-**After (Playwright):**
-```python
-from playwright.sync_api import sync_playwright
-
-with sync_playwright() as p:
-    browser = p.chromium.launch(headless=False)
-    context = browser.new_context()
-    page = context.new_page()
-    
-    page.goto("https://example.com/login")
-    
-    # Fill form
-    page.locator("#username").fill("testuser")
-    page.locator("#password").fill("password123")
-    
-    # Submit
-    page.locator("button[type='submit']").click()
-    
-    # Wait for redirect
-    page.wait_for_selector(".dashboard", timeout=10000)
-    
-    print(f"Current URL: {page.url}")
-    
-    context.close()
-    browser.close()
-```
-
----
-
-## 🔧 Configuration
-
-### Config File
-
-Create a `config.yaml` file for persistent settings:
-
-```yaml
-llm:
-  provider: ollama
-  model: codellama
-  temperature: 0.1
-  max_tokens: 4096
-
-conversion:
-  preserve_structure: true
-  add_comments: true
-  use_async: false
-```
-
-### Environment Variables
-
-```bash
-export S2P_LLM_PROVIDER=ollama
-export S2P_MODEL_NAME=codellama
-export S2P_API_BASE=http://localhost:11434
-```
-
----
-
-## 🧪 Examples
-
-Check the `examples/` directory for sample conversions:
-
-- `selenium_sample.py` - Original Selenium test
-- `playwright_converted.py` - Converted Playwright test
-
-### Running Examples
-
-```bash
-# Analyze the sample
-python -m src examples/selenium_sample.py --analyze
-
-# Convert the sample
-python -m src examples/selenium_sample.py -o examples/
-
-# Compare results
-diff examples/selenium_sample.py examples/selenium_sample_playwright.py
+Selenium2PlaywrightConvertToLocalLLM/
+├── README.md              # This file
+├── LICENSE                # MIT License
+├── requirements.txt       # Python dependencies
+│
+├── tools/                 # Main application
+│   ├── app_llm_smart.py          # Flask web server
+│   └── converter_llm_smart.py    # LLM conversion engine
+│
+├── templates/             # HTML templates
+│   └── index.html         # Web interface
+│
+├── static/                # CSS/JS assets
+│   └── style.css          # Styles
+│
+├── generated/             # Output directory
+│   └── (converted files saved here)
+│
+└── assets/                # Images and documentation
+    └── banner.png
 ```
 
 ---
 
 ## 🛠️ Troubleshooting
 
-### Common Issues
+### Issue: "LLM call failed: Connection refused"
 
-#### Ollama Connection Error
-```
-Error: Could not connect to Ollama at http://localhost:11434
-```
-**Solution:** Make sure Ollama is running:
+**Solution:** Ollama is not running. Start it with:
 ```bash
 ollama serve
 ```
 
-#### Model Not Found
-```
-Error: model 'codellama' not found
-```
-**Solution:** Pull the model first:
-```bash
-ollama pull codellama
-```
+### Issue: "Read timed out"
 
-#### Python Import Errors
-```
-ModuleNotFoundError: No module named 'playwright'
-```
+**Solution:** The converter automatically falls back to pattern matching. No action needed!
+
+### Issue: "ModuleNotFoundError: No module named 'flask_cors'"
+
 **Solution:** Install dependencies:
 ```bash
-pip install -r requirements.txt
-playwright install
-```
-
-### Getting Help
-
-- 📖 [Documentation](https://github.com/Qais7744/Selenium2PlaywrightConvertToLocalLLM#readme)
-- 🐛 [Issue Tracker](https://github.com/Qais7744/Selenium2PlaywrightConvertToLocalLLM/issues)
-- 💬 [Discussions](https://github.com/Qais7744/Selenium2PlaywrightConvertToLocalLLM/discussions)
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-### Development Setup
-
-```bash
-# Clone your fork
-git clone https://github.com/YOUR_USERNAME/Selenium2PlaywrightConvertToLocalLLM.git
-
-# Install dev dependencies
-pip install -r requirements.txt
-pip install pytest black isort
-
-# Run tests
-pytest tests/
-
-# Format code
-black src/
-isort src/
+pip install flask flask-cors requests
 ```
 
 ---
 
-## 📊 Project Statistics
+## 📊 Example Conversion
 
-![GitHub Stats](https://github-readme-stats.vercel.app/api?username=Qais7744&show_icons=true&theme=dark)
+### Input (Java Selenium)
+```java
+import org.openqa.selenium.*;
+import org.testng.annotations.*;
+
+public class LoginTest {
+    @Test
+    public void testLogin() {
+        driver.get("https://example.com");
+        driver.findElement(By.id("username")).sendKeys("admin");
+        driver.findElement(By.id("login-btn")).click();
+        Assert.assertEquals(driver.getTitle(), "Dashboard");
+    }
+}
+```
+
+### Output (Playwright TypeScript)
+```typescript
+import { test, expect } from '@playwright/test';
+
+test.describe('LoginTest', () => {
+    test('testLogin', async ({ page }) => {
+        await page.goto("https://example.com");
+        await page.locator("#username").fill("admin");
+        await page.locator("#login-btn").click();
+        expect(await page.title()).toBe("Dashboard");
+    });
+});
+```
 
 ---
 
@@ -501,19 +246,4 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ---
 
-## 📞 Contact
-
-**Qais7744**
-
-- GitHub: [@Qais7744](https://github.com/Qais7744)
-- Project: [Selenium2Playwright](https://github.com/Qais7744/Selenium2PlaywrightConvertToLocalLLM)
-
----
-
-<div align="center">
-
-**⭐ Star this repository if you find it helpful! ⭐**
-
 Made with ❤️ and 🤖 Local LLMs
-
-</div>
