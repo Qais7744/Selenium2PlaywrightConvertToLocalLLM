@@ -145,7 +145,7 @@ def validate_and_fix(code: str) -> str:
         code = "import { test, expect } from '@playwright/test';\n\n" + code
     
     # Remove chromium imports if present
-    code = re.sub(r"import\s*\{\s*chromium\s*\}\s*from\s*['"]playwright['"];?\n?", '', code)
+    code = re.sub(r"import\s*\{\s*chromium\s*\}\s*from\s*['\"]playwright['\"];?\n?", '', code)
     
     # Remove manual browser launching
     code = re.sub(r'const\s+\w+\s*=\s*await\s+chromium\.launch[^;]*;?', '', code)
